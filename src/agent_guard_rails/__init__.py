@@ -1,4 +1,16 @@
-"""agent-guard-rails-py — composable output guardrails for LLM agent responses."""
+"""agent-guard-rails-py — composable output guardrails for LLM agent responses.
+
+The public surface is intentionally small:
+
+* :class:`GuardRail` — a container of rules with builder methods for the common
+  cases plus :meth:`GuardRail.add` for custom rules.
+* :class:`GuardrailViolation` — the exception a failing rule raises.
+* :class:`GuardrailResult` — the aggregate result returned by
+  :meth:`GuardRail.run`.
+
+A *rule* is any callable ``(output) -> None`` that returns ``None`` to accept the
+output or raises :class:`GuardrailViolation` to reject it.
+"""
 
 from __future__ import annotations
 
@@ -170,13 +182,30 @@ class GuardRail:
         return self.add(name, rule)
 
     def check(self, output: Any) -> Any:
-        """Run all rules. Raises GuardrailViolation on the first failure."""
-        for name, rule in self._rules:
+        """Run all rules in order and return ``output`` unchanged if they pass.
+
+        Rules execute in registration order and evaluation short-circuits on the
+        first failure.
+
+        :param output: The value to validate.
+        :returns: ``output`` unchanged when every rule passes.
+        :raises GuardrailViolation: As soon as a rule rejects ``output``.
+        """
+        for _name, rule in self._rules:
             rule(output)
         return output
 
     def run(self, output: Any) -> GuardrailResult:
-        """Run all rules, collecting violations without raising."""
+        """Run all rules, collecting violations instead of raising.
+
+        Every rule is executed even after one fails. A rule that raises an
+        unexpected (non-:class:`GuardrailViolation`) exception is wrapped so a
+        misbehaving rule can never crash :meth:`run`.
+
+        :param output: The value to validate.
+        :returns: A :class:`GuardrailResult` whose ``passed`` flag is ``True``
+            only when no rule failed.
+        """
         violations: list[str] = []
         errors: list[GuardrailViolation] = []
         for name, rule in self._rules:
