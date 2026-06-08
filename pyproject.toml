@@ -17,6 +17,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
 [project.urls]
 Homepage = "https://github.com/MukundaKatta/agent-guard-rails-py"
 

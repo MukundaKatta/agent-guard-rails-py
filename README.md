@@ -27,8 +27,11 @@ output = rails.check(llm_response)
 # Collect all violations:
 result = rails.run(llm_response)
 if not result.passed:
-    for v in result.violations:
+    for v in result.violations:  # human-readable messages
         print(v)
+    # Or inspect structured GuardrailViolation objects:
+    for err in result.errors:
+        print(err.rule_name, err.reason)
 
 # Custom rule:
 def no_exclamations(output):

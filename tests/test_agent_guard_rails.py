@@ -1,5 +1,7 @@
 """Tests for agent-guard-rails-py."""
+
 import pytest
+import agent_guard_rails
 from agent_guard_rails import GuardRail, GuardrailViolation, GuardrailResult
 
 
@@ -137,7 +139,9 @@ def test_custom_rule():
 
     def no_exclamation(output):
         if "!" in str(output):
-            raise GuardrailViolation("no_exclamation", "No exclamation marks allowed!", output)
+            raise GuardrailViolation(
+                "no_exclamation", "No exclamation marks allowed!", output
+            )
 
     rails.add("no_exclamation", no_exclamation)
     rails.check("fine text")
@@ -160,3 +164,69 @@ def test_violation_output_attribute():
         rails.check("toolong")
     except GuardrailViolation as exc:
         assert exc.output == "toolong"
+
+
+def test_version_exposed():
+    assert isinstance(agent_guard_rails.__version__, str)
+    assert agent_guard_rails.__version__
+
+
+def test_run_exposes_structured_errors():
+    rails = GuardRail()
+    rails.add_length(min_chars=100)
+    rails.add_required_pattern(r"^#", name="heading")
+    result = rails.run("short text")
+    assert result.passed is False
+    assert len(result.errors) == 2
+    assert all(isinstance(e, GuardrailViolation) for e in result.errors)
+    rule_names = {e.rule_name for e in result.errors}
+    assert rule_names == {"length", "heading"}
+    # String messages stay in sync with structured errors.
+    assert [str(e) for e in result.errors] == result.violations
+
+
+def test_run_no_errors_when_passing():
+    rails = GuardRail()
+    rails.add_not_empty()
+    result = rails.run("ok")
+    assert result.passed is True
+    assert result.errors == []
+
+
+def test_run_wraps_unexpected_error():
+    rails = GuardRail()
+
+    def boom(output):
+        raise ValueError("kaboom")
+
+    rails.add("boom", boom)
+    result = rails.run("x")
+    assert result.passed is False
+    assert len(result.errors) == 1
+    assert result.errors[0].rule_name == "boom"
+    assert "kaboom" in result.violations[0]
+
+
+def test_result_preserves_output():
+    rails = GuardRail()
+    rails.add_length(min_chars=100)
+    result = rails.run("tiny")
+    assert result.output == "tiny"
+
+
+def test_no_keywords_case_sensitive():
+    rails = GuardRail()
+    rails.add_no_keywords(["Secret"], case_sensitive=True)
+    rails.check("this is secret")  # lowercase does not match
+    with pytest.raises(GuardrailViolation):
+        rails.check("this is Secret")
+
+
+def test_length_min_and_max_together():
+    rails = GuardRail()
+    rails.add_length(min_chars=3, max_chars=6)
+    rails.check("abcd")
+    with pytest.raises(GuardrailViolation):
+        rails.check("ab")
+    with pytest.raises(GuardrailViolation):
+        rails.check("toolong")
